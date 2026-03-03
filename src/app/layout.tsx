@@ -27,7 +27,7 @@ export default function RootLayout({
         <AuthProvider>
           <Header />
           <main
-            className="max-w-[900px] mx-auto px-4"
+            className="w-full min-h-screen"
             style={{ paddingTop: HEADER_HEIGHT }}
           >
             {children}
