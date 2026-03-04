@@ -62,6 +62,31 @@ export async function fetchPlaces(): Promise<Place[]> {
   }
 }
 
+// 맛집 트렌딩 목록 조회
+export async function fetchTrendingPlaces(): Promise<Place[]> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/v1/restaurants/trending`);
+    if (!res.ok) throw new Error('맛집 목록을 불러오는데 실패했습니다.');
+    const list: any[] = await res.json();
+
+    return list.map(p => ({
+      ...p,
+      id: p.id.toString(),
+      road_address: p.road_address || p.address,
+      review_count: p.review_count || 0,
+      rating: p.rating || 0,
+      region: (p.road_address || p.address || "").split(' ')[1] || "전체",
+      tags: ["#최신등록", `#${p.category || '맛집'}`],
+      thumbnail: p.image_url || null,
+      grad: p.image_url ? `url(${p.image_url})` : "linear-gradient(135deg,#74b9ff,#a29bfe)",
+      emoji: "🍴"
+    }));
+  } catch (error) {
+    console.error("fetchPlaces Error:", error);
+    return [];
+  }
+}
+
 // 맛집 검색 (등록 전 검색용)
 export async function searchRestaurants(query: string): Promise<any[]> {
   if (!query) return [];
