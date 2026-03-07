@@ -9,6 +9,9 @@ import {
   postReview,
   Review,
   searchRestaurants,
+  addBookmark,
+  removeBookmark,
+  getMyBookmarks,
 } from "@/lib/api";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -262,26 +265,39 @@ function PlaceCard({
 // ── 상세 팝업 패널 ───────────────────────────────
 function DetailPanel({
   place,
+  reviewCount,
+  rating,
   isFav,
   onFav,
   onClose,
   onReviewSubmit,
 }: {
   place: Place;
+  reviewCount: number;
+  rating: number;
   isFav: boolean;
   onFav: () => void;
   onClose: () => void;
-  onReviewSubmit: () => void;
+  onReviewSubmit: (newRating: number) => void;
 }) {
   const { user, openLoginModal } = useAuth();
   const [view, setView] = useState("info"); // "info" | "review" | "reviews"
-  const [rating, setRating] = useState(5);
+  const [userRating, setUserRating] = useState(5);
   const [comment, setComment] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
   const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loadingReviews, setLoadingReviews] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [errorMsg, setErrorMsg] = useState(""); // 👈 에러 메시지를 담을 상태 추가!
+  const [currentReviewPage, setCurrentReviewPage] = useState(1);
+  const REVIEWS_PER_PAGE = 5;
   const isValid = comment.length >= 5;
+  const totalPages = Math.ceil(reviews.length / REVIEWS_PER_PAGE);
+  const currentReviews = reviews.slice(
+    (currentReviewPage - 1) * REVIEWS_PER_PAGE,
+    currentReviewPage * REVIEWS_PER_PAGE,
+  );
 
   const RATING_TEXTS = [
     "최악이에요",
@@ -337,22 +353,36 @@ function DetailPanel({
 
   const handleSubmitReview = async () => {
     if (!isValid) return;
+
     if (!user) {
       alert("리뷰를 작성하려면 로그인이 필요합니다.");
       onClose();
       openLoginModal();
       return;
     }
+
     try {
       await postReview(place.id, { rating, content: comment }, photos);
-      alert("리뷰가 등록되었습니다!");
-      setView("info");
-      setComment("");
-      setPhotos([]);
-      setPhotoPreviews([]);
-      onReviewSubmit();
+
+      await fetchReviews(place.id);
+      setIsSuccess(true);
+
+      setTimeout(() => {
+        setIsSuccess(false); // 성공 화면 끄기
+        setView("info"); // 상세 정보 탭으로 이동
+
+        setComment("");
+
+        setUserRating(5); // 별점 상태가 있다면 이것도 초기화 추천!
+        setPhotos([]);
+        setPhotoPreviews([]);
+
+        // 부모 컴포넌트(List) 업데이트
+        onReviewSubmit(userRating);
+      }, 2000); // 2초(2000ms)
     } catch (e: any) {
-      alert(e.message || "리뷰 등록에 실패했습니다.");
+      setErrorMsg(e.message);
+      setIsSuccess(false);
     }
   };
 
@@ -483,7 +513,7 @@ function DetailPanel({
                     boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
                   }}
                 >
-                  {isFav ? "💜" : "🤍"}
+                  {isFav ? "❤️" : "🤍"}
                 </button>
 
                 {/* 닫기 버튼 */}
@@ -566,7 +596,7 @@ function DetailPanel({
                       marginLeft: 4,
                     }}
                   >
-                    {place.rating}
+                    {rating.toFixed(1)}
                   </span>
                   <button
                     onClick={() => setView("reviews")}
@@ -580,7 +610,7 @@ function DetailPanel({
                       cursor: "pointer",
                     }}
                   >
-                    리뷰 {place.review_count}개 &gt;
+                    리뷰 {reviewCount}개 &gt;
                   </button>
                 </div>
 
@@ -603,24 +633,78 @@ function DetailPanel({
                   ))}
                 </div>
 
-                {/* 한줄 평 */}
+                {/* --- 카카오맵 연동 버튼 영역 --- */}
                 <div
                   style={{
-                    background: "#f8f9fa",
-                    borderRadius: 20,
-                    padding: "16px 20px",
-                    marginBottom: 28,
                     display: "flex",
-                    gap: 10,
-                    alignItems: "center",
+                    gap: "12px",
+                    marginBottom: 28,
                   }}
                 >
-                  <span style={{ fontSize: 16 }}>💬</span>
-                  <span
-                    style={{ fontSize: 13, color: "#4b5563", lineHeight: 1.5 }}
+                  {/* 1. 카카오맵에서 보기 버튼 */}
+                  <a
+                    href={place.place_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      flex: 1, // 두 버튼이 동일한 너비를 가지도록 1:1 비율 적용
+                      background: "#FEE500", // 카카오 상징 노란색
+                      color: "#000000", // 카카오 버튼 텍스트는 보통 검은색!
+                      borderRadius: 16,
+                      padding: "14px 0",
+                      textAlign: "center",
+                      textDecoration: "none",
+                      fontWeight: 800,
+                      fontSize: 14,
+                      display: "flex",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      gap: 6,
+                      boxShadow: "0 4px 12px rgba(254, 229, 0, 0.2)", // 은은한 노란색 그림자
+                      transition: "transform 0.1s",
+                    }}
+                    onMouseOver={(e) =>
+                      (e.currentTarget.style.transform = "scale(0.98)")
+                    }
+                    onMouseOut={(e) =>
+                      (e.currentTarget.style.transform = "scale(1)")
+                    }
                   >
-                    {"홍대 골목 깊숙이 숨어있는 진짜배기 삼겹살집"}
-                  </span>
+                    <span style={{ fontSize: 16 }}>🗺️</span> 카카오맵 보기
+                  </a>
+
+                  {/* 2. 바로 길찾기 버튼 */}
+                  <a
+                    // 카카오맵 공식 길찾기 URL 포맷: https://map.kakao.com/link/to/이름,위도,경도
+                    href={`https://map.kakao.com/link/to/${encodeURIComponent(place.name)},${place.latitude},${place.longitude}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      flex: 1,
+                      background: "#333333", // 진한 회색 (배부룩 브랜드 컬러인 BRAND 변수를 쓰셔도 좋습니다!)
+                      color: "#ffffff",
+                      borderRadius: 16,
+                      padding: "14px 0",
+                      textAlign: "center",
+                      textDecoration: "none",
+                      fontWeight: 800,
+                      fontSize: 14,
+                      display: "flex",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      gap: 6,
+                      boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+                      transition: "transform 0.1s",
+                    }}
+                    onMouseOver={(e) =>
+                      (e.currentTarget.style.transform = "scale(0.98)")
+                    }
+                    onMouseOut={(e) =>
+                      (e.currentTarget.style.transform = "scale(1)")
+                    }
+                  >
+                    <span style={{ fontSize: 16 }}>📍</span> 길찾기
+                  </a>
                 </div>
 
                 {/* 상세 리스트 */}
@@ -698,7 +782,7 @@ function DetailPanel({
                       alignItems: "flex-start",
                     }}
                   >
-                    <span style={{ fontSize: 20, color: "#9ca3af" }}>🕐</span>
+                    <span style={{ fontSize: 20, color: "#9ca3af" }}>📅</span>
                     <div>
                       <p
                         style={{
@@ -707,7 +791,7 @@ function DetailPanel({
                           marginBottom: 4,
                         }}
                       >
-                        영업시간
+                        배부룩 발견일
                       </p>
                       <p
                         style={{
@@ -716,7 +800,16 @@ function DetailPanel({
                           fontWeight: 500,
                         }}
                       >
-                        {"11:30 ~ 23:00"}
+                        {place.created_at
+                          ? new Date(place.created_at).toLocaleDateString(
+                              "ko-KR",
+                              {
+                                year: "numeric",
+                                month: "long",
+                                day: "numeric",
+                              },
+                            )
+                          : "최근 등록됨"}
                       </p>
                     </div>
                   </div>
@@ -765,13 +858,13 @@ function DetailPanel({
                   {[1, 2, 3, 4, 5].map((v) => (
                     <button
                       key={v}
-                      onClick={() => setRating(v)}
+                      onClick={() => setUserRating(v)}
                       style={{
                         background: "none",
                         border: "none",
                         fontSize: 40,
                         cursor: "pointer",
-                        color: v <= rating ? "#fbbf24" : "#eee",
+                        color: v <= userRating ? "#fbbf24" : "#eee",
                         transition: "transform 0.2s",
                       }}
                       onPointerDown={(e) =>
@@ -967,7 +1060,8 @@ function DetailPanel({
                 <div
                   style={{ display: "flex", flexDirection: "column", gap: 20 }}
                 >
-                  {reviews.map((rev) => (
+                  {/* 🌟 기존 reviews 대신 currentReviews를 돌립니다! */}
+                  {currentReviews.map((rev) => (
                     <div
                       key={rev.id}
                       style={{
@@ -1018,6 +1112,87 @@ function DetailPanel({
                       </p>
                     </div>
                   ))}
+
+                  {/* 🌟 페이지네이션 컨트롤러 */}
+                  {totalPages > 1 && (
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "center",
+                        alignItems: "center",
+                        gap: 16,
+                        marginTop: 12,
+                        paddingTop: 12,
+                      }}
+                    >
+                      {/* 이전 버튼 */}
+                      <button
+                        onClick={() =>
+                          setCurrentReviewPage((p) => Math.max(1, p - 1))
+                        }
+                        disabled={currentReviewPage === 1}
+                        style={{
+                          padding: "8px 16px",
+                          borderRadius: 8,
+                          fontSize: 13,
+                          fontWeight: 700,
+                          background:
+                            currentReviewPage === 1 ? "#f3f4f6" : "white",
+                          color:
+                            currentReviewPage === 1 ? "#d1d5db" : "#4b5563",
+                          border: `1px solid ${currentReviewPage === 1 ? "#e5e7eb" : "#d1d5db"}`,
+                          cursor:
+                            currentReviewPage === 1 ? "not-allowed" : "pointer",
+                          transition: "all 0.2s",
+                        }}
+                      >
+                        이전
+                      </button>
+
+                      {/* 현재 페이지 표시 */}
+                      <span
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 700,
+                          color: "#374151",
+                        }}
+                      >
+                        {currentReviewPage} / {totalPages}
+                      </span>
+
+                      {/* 다음 버튼 */}
+                      <button
+                        onClick={() =>
+                          setCurrentReviewPage((p) =>
+                            Math.min(totalPages, p + 1),
+                          )
+                        }
+                        disabled={currentReviewPage === totalPages}
+                        style={{
+                          padding: "8px 16px",
+                          borderRadius: 8,
+                          fontSize: 13,
+                          fontWeight: 700,
+                          background:
+                            currentReviewPage === totalPages
+                              ? "#f3f4f6"
+                              : "white",
+                          color:
+                            currentReviewPage === totalPages
+                              ? "#d1d5db"
+                              : "#4b5563",
+                          border: `1px solid ${currentReviewPage === totalPages ? "#e5e7eb" : "#d1d5db"}`,
+                          cursor:
+                            currentReviewPage === totalPages
+                              ? "not-allowed"
+                              : "pointer",
+                          transition: "all 0.2s",
+                        }}
+                      >
+                        다음
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1087,6 +1262,26 @@ function DetailPanel({
               zIndex: 10,
             }}
           >
+            {/* 🚨 에러 메시지가 있을 때만 보여주는 경고창 */}
+            {errorMsg && (
+              <div
+                style={{
+                  marginBottom: 12,
+                  padding: "10px 14px",
+                  background: "#fef2f2", // 연한 빨간색 배경
+                  borderRadius: 12,
+                  color: "#ef4444", // 진한 빨간색 글씨
+                  fontSize: 13,
+                  fontWeight: 700,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  animation: "fadeIn 0.2s ease-in-out",
+                }}
+              >
+                <span>🚨</span> {errorMsg}
+              </div>
+            )}
             <button
               onClick={handleSubmitReview}
               disabled={!isValid}
@@ -1107,6 +1302,45 @@ function DetailPanel({
             >
               리뷰 등록 완료
             </button>
+            {/* 🌟 성공 시 나타나는 체크 표시 팝업 (오버레이) 🌟 */}
+            {isSuccess && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  background: "rgba(255, 255, 255, 0.95)", // 반투명 흰색 배경
+                  backdropFilter: "blur(4px)",
+                  zIndex: 9999,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <div
+                  style={{ fontSize: 60, marginBottom: 16 }}
+                  className="animate-bounce"
+                >
+                  ✅
+                </div>
+                <h3
+                  style={{
+                    fontSize: 24,
+                    fontWeight: 900,
+                    color: "#111",
+                    marginBottom: 8,
+                  }}
+                >
+                  리뷰 등록 완료!
+                </h3>
+                <p style={{ fontSize: 15, color: "#6b7280", fontWeight: 500 }}>
+                  소중한 리뷰를 남겨주셔서 감사합니다.
+                </p>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1127,6 +1361,7 @@ function ListContent() {
   const [onlyFav, setOnlyFav] = useState(false);
   const [detail, setDetail] = useState<Place | null>(null);
   const [reviewCounts, setReviewCounts] = useState<Record<string, number>>({});
+  const [ratings, setRatings] = useState<Record<string, number>>({});
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -1136,8 +1371,21 @@ function ListContent() {
   const loadInitialPlaces = async () => {
     setLoading(true);
     try {
-      const data = await fetchPlaces();
+      // Promise.all을 사용해 맛집 목록과 즐겨찾기 목록을 동시에 빠르게 가져옵니다.
+      const [data, bookmarks] = await Promise.all([
+        fetchPlaces(),
+        getMyBookmarks().catch(() => []), // 비로그인 상태일 수도 있으니 에러 시 빈 배열 반환
+      ]);
+
       setPlaces(data);
+
+      // 💡 서버에서 받아온 즐겨찾기 목록으로 favs(Set) 초기화
+      // API 응답 구조에 따라 b.restaurant_id 대신 b.id 등 알맞은 키값을 사용하세요!
+      const bookmarkIds = new Set<string>(
+        bookmarks.map((b: any) => String(b.restaurant_id || b.id)),
+      );
+      setFavs(bookmarkIds);
+
       const counts: Record<string, number> = {};
       data.forEach((p) => (counts[p.id] = p.review_count));
       setReviewCounts(counts);
@@ -1177,12 +1425,35 @@ function ListContent() {
     }
   };
 
-  const toggleFav = (id: string) =>
+  const toggleFav = async (id: string) => {
+    const isCurrentlyFav = favs.has(id);
+
+    // 1. [낙관적 업데이트] API 응답을 기다리지 않고 화면의 하트부터 즉시 변경합니다!
     setFavs((prev) => {
       const n = new Set(prev);
-      n.has(id) ? n.delete(id) : n.add(id);
+      isCurrentlyFav ? n.delete(id) : n.add(id);
       return n;
     });
+
+    // 2. 백그라운드에서 API 호출
+    try {
+      if (isCurrentlyFav) {
+        // 이미 하트가 켜져 있었다면 삭제 API
+        await removeBookmark(id);
+      } else {
+        // 하트가 꺼져 있었다면 추가 API
+        await addBookmark(id);
+      }
+    } catch (error: any) {
+      // 3. API 통신이 실패하면 하트 상태를 원래대로 되돌립니다 (롤백)
+      alert(error.message || "즐겨찾기 처리에 실패했습니다.");
+      setFavs((prev) => {
+        const n = new Set(prev);
+        isCurrentlyFav ? n.add(id) : n.delete(id);
+        return n;
+      });
+    }
+  };
 
   const filtered = places.filter(
     (p) =>
@@ -1457,15 +1728,26 @@ function ListContent() {
       {detail && (
         <DetailPanel
           place={detail}
+          // 🌟 핵심: 부모가 관리하는 '최신 리뷰 카운트'를 따로 넘겨줍니다!
+          // (만약 아직 값이 없다면 기본 place.review_count를 사용)
+          reviewCount={reviewCounts[detail.id] || detail.review_count || 0}
+          rating={ratings[detail.id] || detail.rating || 0}
           isFav={favs.has(detail.id)}
           onFav={() => toggleFav(detail.id)}
           onClose={() => setDetail(null)}
-          onReviewSubmit={() =>
-            setReviewCounts((prev) => ({
-              ...prev,
-              [detail.id]: (prev[detail.id] || 0) + 1,
-            }))
-          }
+          onReviewSubmit={(newRating: number) => {
+            const currentCount =
+              reviewCounts[detail.id] || detail.review_count || 0;
+            const currentRating = ratings[detail.id] || detail.rating || 0;
+
+            // 새로운 평균 별점 계산
+            const nextCount = currentCount + 1;
+            const nextAverage =
+              (currentRating * currentCount + newRating) / nextCount;
+
+            setReviewCounts((prev) => ({ ...prev, [detail.id]: nextCount }));
+            setRatings((prev) => ({ ...prev, [detail.id]: nextAverage }));
+          }}
         />
       )}
     </div>

@@ -3,85 +3,115 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { searchRestaurantsByName } from "@/lib/api";
 
 // 검색 결과 타입 정의
 interface SearchResult {
-  id: number;
+  id: string;
   name: string;
+  category: string;
+  phone: string;
+  place_url: string;
+  road_address: string;
   address: string;
-  imageUrl: string;
+  latitude: number;
+  longitude: number;
+  image_url: string;
 }
 
 export default function AddRestaurantPage() {
   const router = useRouter();
   const { user, openLoginModal, openSignupModal } = useAuth();
   const [formData, setFormData] = useState({
+    kakao_place_id: "",
     name: "",
+    category: "",
+    phone: "",
+    place_url: "",
+    road_address: "",
     address: "",
-    category: "KOREAN",
-    description: "",
-    imageUrl: "",
+    latitude: 0,
+    longitude: 0,
+    image_url: "",
+    content: "",
+    review_images: [],
   });
   const [restaurantName, setRestaurantName] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [imageFile, setImageFile] = useState<File | null>(null);
-
-
+  const [isReviewChecked, setIsReviewChecked] = useState(false); // 리뷰 작성 체크박스
+  const [rating, setRating] = useState(5);
 
   const handleChange = (
     e: React.ChangeEvent<
       HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-    >
+    >,
   ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSearch = async () => {
-    // TODO: 실제 API 연동 필요
-    // API 명세에 따라, restaurant_id가 실제로는 검색어(이름)를 의미하는 것으로 간주하고 구현합니다.
     if (!restaurantName.trim()) {
       alert("검색할 맛집 이름을 입력해주세요.");
       return;
     }
-    const mockApiUrl = `/api/v1/restaurants/${restaurantName}`; // 요청 URL
+
     console.log("Searching:", restaurantName);
 
-    // --- API 호출 시뮬레이션 ---
-    // 실제로는 fetch 등을 사용하여 API를 호출하고 데이터를 받아옵니다.
-    // const response = await fetch(mockApiUrl);
-    // const data = await response.json();
-    // setSearchResults(data.results);
+    // 1. 분리해둔 API 함수 호출! (알아서 매핑된 배열이 리턴됨)
+    const results = await searchRestaurantsByName(restaurantName);
 
-    // 현재는 목(mock) 데이터를 사용합니다.
-    setSearchResults([
-      {
-        id: 1,
-        name: restaurantName,
-        address: "서울시 강남구",
-        imageUrl: "https://source.unsplash.com/random/200x200",
-      },
-      {
-        id: 2,
-        name: `${restaurantName} 2호점`,
-        address: "서울시 서초구",
-        imageUrl: "https://source.unsplash.com/random/200x201",
-      },
-    ]);
-    console.log("Mock API URL:", mockApiUrl);
+    // 2. 리턴받은 데이터를 바로 상태에 저장
+    setSearchResults(results);
+
+    // 3. (선택) 검색 결과가 0개일 때 알림창
+    if (results.length === 0) {
+      alert("검색 결과가 없습니다. 다른 이름으로 검색해 보세요.");
+    }
   };
 
-  const handleSelectRestaurant = (result: SearchResult) => {
-    setFormData((prev) => ({ ...prev, name: result.name, address: result.address, imageUrl: result.imageUrl }));
-    setRestaurantName(result.name); // 검색창에도 선택한 맛집 이름 반영
-    setSearchResults([]); // 목록 숨기기
+  const handleSelectRestaurant = (selectedItem: SearchResult) => {
+    setFormData((prev) => ({
+      ...prev,
+      kakao_place_id: selectedItem.id,
+      name: selectedItem.name,
+      address: selectedItem.address,
+      category: selectedItem.category || "",
+      phone: selectedItem.phone || "",
+      place_url: selectedItem.place_url || "",
+      road_address: selectedItem.road_address || "",
+      image_url: selectedItem.image_url || "",
+      latitude: selectedItem.latitude || 0,
+      longitude: selectedItem.longitude || 0,
+    }));
+
+    // 선택 후 검색 결과 목록 숨기기 (선택사항)
+    setSearchResults([]);
+    // 검색창 텍스트도 선택한 식당 이름으로 바꿔주기 (선택사항)
+    setRestaurantName(selectedItem.name);
+  };
+
+  // 사용자가 직접 이미지를 선택했을 때 실행되는 함수
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setImageFile(e.target.files[0]);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // 1. 필수 값 검증 (상호명 및 카카오 고유 ID 등)
+    // formData에 kakao_place_id가 저장되어 있다고 가정합니다.
     if (!formData.name) {
       alert("맛집을 검색하고 선택해주세요.");
+      return;
+    }
+
+    // 2. 리뷰 옵션 체크 시 유효성 검사
+    if (isReviewChecked && formData.content.length < 10) {
+      alert("리뷰 내용을 10자 이상 작성해주세요.");
       return;
     }
 
@@ -92,40 +122,55 @@ export default function AddRestaurantPage() {
       return;
     }
 
-    const restaurantId = formData.name;
-    const requestBody = new FormData();
-
+    // 3. 백엔드 스키마(ReviewWithRestaurantCreate)에 맞춘 데이터 페이로드 구성
     const requestData = {
-      category: formData.category,
-      address: formData.address,
-      description: formData.description,
+      restaurant: {
+        kakao_place_id: formData.kakao_place_id, // 검색 결과에서 받아온 카카오 장소 ID
+        name: formData.name,
+        category: formData.category || null,
+        phone: formData.phone || null,
+        place_url: formData.place_url || null,
+        road_address: formData.road_address || formData.address || null,
+        address: formData.address || null,
+        image_url: formData.image_url || null, // 검색된 원본 이미지 URL
+        latitude: Number(formData.latitude), // float 타입 변환
+        longitude: Number(formData.longitude), // float 타입 변환
+      },
+      // 사용자가 리뷰 작성을 체크했을 때만 리뷰 데이터를 포함, 아니면 null 처리
+      rating: isReviewChecked ? rating : null,
+      content: isReviewChecked ? formData.content : null,
     };
 
+    const requestBody = new FormData();
+
+    // JSON 데이터를 문자열로 변환하여 'request_data'라는 필드명으로 전송
     requestBody.append("request_data", JSON.stringify(requestData));
 
+    // 사용자가 직접 올린 사진이 있을 경우에만 파일 전송
     if (imageFile) {
       requestBody.append("files", imageFile);
     }
 
     try {
+      // 💡 변경점: URL 경로 수정 (보통 생성 엔드포인트는 ID를 붙이지 않음) 및 POST 메서드 사용
       const response = await fetch(
-        `https://api.baebulook.site/api/v1/restaurants/${restaurantId}`,
+        `https://api.baebulook.site/api/v1/reviews/register`,
         {
-          method: "PUT",
+          method: "POST",
           headers: {
             Authorization: `Bearer ${token}`,
           },
           body: requestBody,
-        }
+        },
       );
 
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || "맛집 등록에 실패했습니다.");
       }
 
-      alert("맛집이 성공적으로 추가되었습니다!");
-      router.push("/list");
+      alert("맛집이 성공적으로 등록되었습니다!");
+      router.push("/list"); // 등록 성공 시 리스트 페이지로 이동
     } catch (error: any) {
       console.error("Failed to add restaurant:", error);
       alert(error.message);
@@ -136,11 +181,25 @@ export default function AddRestaurantPage() {
     return (
       <div className="min-h-[calc(100vh-56px)] bg-gray-50 flex flex-col items-center justify-center text-center p-4">
         <div className="bg-white p-8 sm:p-12 rounded-2xl shadow-lg max-w-md w-full border border-gray-100">
-          <svg className="w-16 h-16 mx-auto text-orange-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+          <svg
+            className="w-16 h-16 mx-auto text-orange-500 mb-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={1.5}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
+            />
           </svg>
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">로그인이 필요해요</h1>
-          <p className="text-gray-600 mb-6">맛집을 추가하려면 먼저 로그인해주세요.</p>
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">
+            로그인이 필요해요
+          </h1>
+          <p className="text-gray-600 mb-6">
+            맛집을 추가하려면 먼저 로그인해주세요.
+          </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button
               onClick={openLoginModal}
@@ -202,11 +261,21 @@ export default function AddRestaurantPage() {
               {searchResults.length > 0 && (
                 <ul className="mt-2 border border-gray-200 rounded-xl bg-white shadow-lg z-20 relative">
                   {searchResults.map((result) => (
-                    <li key={result.id} onClick={() => handleSelectRestaurant(result)} className="p-4 flex items-center cursor-pointer hover:bg-gray-50 border-b last:border-b-0">
-                      <img src={result.imageUrl} alt={result.name} className="w-10 h-10 rounded-full mr-4 object-cover" />
+                    <li
+                      key={result.id}
+                      onClick={() => handleSelectRestaurant(result)}
+                      className="p-4 flex items-center cursor-pointer hover:bg-gray-50 border-b last:border-b-0"
+                    >
+                      <img
+                        src={result.image_url}
+                        alt={result.name}
+                        className="w-10 h-10 rounded-full mr-4 object-cover"
+                      />
                       <div>
                         <p className="font-semibold">{result.name}</p>
-                        <p className="text-sm text-gray-500">{result.address}</p>
+                        <p className="text-sm text-gray-500">
+                          {result.address}
+                        </p>
                       </div>
                     </li>
                   ))}
@@ -214,32 +283,23 @@ export default function AddRestaurantPage() {
               )}
             </div>
 
-            {/* 카테고리 */}
+            {/* 카테고리 (자동 입력 & 고정) */}
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-2">
                 카테고리 <span className="text-red-500">*</span>
               </label>
-              <div className="relative">
-                <select
-                  name="category"
-                  value={formData.category}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-100 focus:border-[#E8513D] focus:ring-0 transition-colors bg-gray-50 focus:bg-white appearance-none text-gray-800"
-                >
-                  <option value="KOREAN">한식</option>
-                  <option value="CHINESE">중식</option>
-                  <option value="JAPANESE">일식</option>
-                  <option value="WESTERN">양식</option>
-                  <option value="SNACK">분식</option>
-                  <option value="ETC">기타</option>
-                </select>
-                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                </div>
-              </div>
+              <input
+                type="text"
+                name="category"
+                value={formData.category}
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-100 bg-gray-100 text-gray-600 focus:outline-none cursor-not-allowed"
+                placeholder="맛집 검색 시 자동으로 입력됩니다"
+                readOnly
+                required
+              />
             </div>
 
-            {/* 주소 */}
+            {/* 주소 (자동 입력 & 고정) */}
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-2">
                 주소 <span className="text-red-500">*</span>
@@ -248,86 +308,113 @@ export default function AddRestaurantPage() {
                 type="text"
                 name="address"
                 value={formData.address}
-                onChange={handleChange}
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-100 focus:border-[#E8513D] focus:ring-0 transition-colors bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400"
-                placeholder="서울시 강남구..."
-                readOnly // 검색 후 자동 입력되므로 읽기 전용으로 설정
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-100 bg-gray-100 text-gray-600 focus:outline-none cursor-not-allowed"
+                placeholder="맛집 검색 시 자동으로 입력됩니다"
+                readOnly
                 required
               />
             </div>
 
-            {/* 설명 */}
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">
-                설명
-              </label>
-              <textarea
-                name="description"
-                value={formData.description}
-                onChange={handleChange}
-                rows={4}
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-100 focus:border-[#E8513D] focus:ring-0 transition-colors bg-gray-50 focus:bg-white resize-none text-gray-800 placeholder-gray-400"
-                placeholder="이 맛집의 특징을 알려주세요!"
-              />
-            </div>
+            {/* --- 리뷰 작성 옵션 --- */}
+            <div className="mt-8 border-t-2 border-dashed border-gray-200 pt-8">
+              <div className="flex items-center gap-3 mb-6">
+                <input
+                  type="checkbox"
+                  id="writeReview"
+                  checked={isReviewChecked}
+                  onChange={(e) => setIsReviewChecked(e.target.checked)}
+                  className="w-5 h-5 rounded border-gray-300 text-[#E8513D] focus:ring-[#E8513D] cursor-pointer"
+                />
+                <label
+                  htmlFor="writeReview"
+                  className="font-bold text-gray-800 cursor-pointer text-lg"
+                >
+                  이 맛집에 대한 리뷰도 함께 작성할래요! ✍️
+                </label>
+              </div>
 
-            {/* 사진 추가 */}
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">
-                사진 추가
-              </label>
-              {formData.imageUrl && (
-                <div className="mb-4">
-                  <p className="text-sm text-gray-600 mb-2">선택된 이미지:</p>
-                  <img src={formData.imageUrl} alt="미리보기" className="w-[100px] h-[100px] rounded-xl object-cover" />
+              {/* 체크박스가 선택되었을 때만 보여지는 리뷰 폼 영역 */}
+              {isReviewChecked && (
+                <div className="bg-[#f9fafb] p-6 rounded-2xl border border-gray-100 animate-fadeIn">
+                  {/* 1. 별점 선택 */}
+                  <div className="mb-6">
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      별점 <span className="text-red-500">*</span>
+                    </label>
+                    <div className="flex gap-2">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          type="button"
+                          onClick={() => setRating(star)}
+                          className={`text-4xl transition-transform hover:scale-110 ${
+                            star <= rating ? "text-yellow-400" : "text-gray-300"
+                          }`}
+                        >
+                          ★
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 2. 리뷰 내용 작성 (10자 이상) */}
+                  <div className="mb-6">
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      리뷰 <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      name="content"
+                      value={formData.content}
+                      onChange={handleChange}
+                      placeholder="방문하신 맛집은 어떠셨나요? 10자 이상 남겨주세요!"
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#E8513D] focus:ring-0 h-32 resize-none text-gray-800"
+                    />
+                    {/* 10자 이상인지 체크해서 글자색 다르게 보여주기 */}
+                    <p
+                      className={`text-xs mt-2 font-bold ${
+                        formData.content.length < 10
+                          ? "text-red-500"
+                          : "text-green-600"
+                      }`}
+                    >
+                      {formData.content.length < 10
+                        ? `현재 ${formData.content.length}자 (10자 이상 작성해주세요)`
+                        : `현재 ${formData.content.length}자 (작성 완료!)`}
+                    </p>
+                  </div>
+
+                  {/* 3. 사용자 사진 첨부 (API 이미지는 무시하고 오직 첨부한 파일만!) */}
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      사진 첨부 (선택)
+                    </label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageChange}
+                      className="block w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-[#E8513D]/10 file:text-[#E8513D] hover:file:bg-[#E8513D]/20 cursor-pointer"
+                    />
+
+                    {/* 오직 imageFile(사용자가 방금 올린 파일)이 있을 때만 미리보기 렌더링 */}
+                    {imageFile && (
+                      <div className="mt-4 relative w-32 h-32 rounded-xl overflow-hidden border-2 border-gray-200 shadow-sm">
+                        <img
+                          src={URL.createObjectURL(imageFile)}
+                          alt="사용자 첨부 이미지 미리보기"
+                          className="w-full h-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setImageFile(null)}
+                          className="absolute top-1 right-1 bg-black/50 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
-              <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-xl hover:border-[#E8513D] transition-colors bg-gray-50 hover:bg-gray-100">
-                <div className="space-y-1 text-center">
-                  <svg
-                    className="mx-auto h-12 w-12 text-gray-400"
-                    stroke="currentColor"
-                    fill="none"
-                    viewBox="0 0 48 48"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-                      strokeWidth={2}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                  <div className="flex text-sm text-gray-600 justify-center">
-                    <label
-                      htmlFor="file-upload"
-                      className="relative cursor-pointer rounded-md font-medium text-[#E8513D] hover:text-[#d9402c] focus-within:outline-none"
-                    >
-                      <span>파일 업로드</span>
-                      <input
-                        id="file-upload"
-                        name="file-upload"
-                        type="file"
-                        className="sr-only"
-                        accept="image/*"
-                        onChange={(e) => {
-                          const file = e.target.files ? e.target.files[0] : null;
-                          if (file) {
-                            setImageFile(file);
-                            setFormData((prev) => ({
-                              ...prev,
-                              imageUrl: URL.createObjectURL(file),
-                            }));
-                          }
-                        }}
-                      />
-                    </label>
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    PNG, JPG, GIF up to 10MB
-                  </p>
-                </div>
-              </div>
             </div>
 
             <button
