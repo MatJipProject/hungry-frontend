@@ -25,6 +25,8 @@ export interface RestaurantNearbyResponse {
   distance: number;
   rating: number;
   review_count: number;
+  image_url: string;  // 대표 이미지 URL (API에서 제공하는 경우)
+  is_bookmarked: boolean; // 내가 찜한 맛집인지 여부 (API에서 제공하는 경우)
   images?: string[];
   review_preview?: string;
 }

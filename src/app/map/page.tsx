@@ -23,45 +23,48 @@ function Stars({ rating, size = 14 }: { rating: number; size?: number }) {
   );
 }
 
-// ─── 이미지 스와이퍼 ───────────────────────────────────────────────────────────
+// ─── 이미지 스와이퍼 (CSS Scroll Snap 적용) ───────────────────────────────────
 
 function ImageSwiper({ images }: { images?: string[] }) {
-  const [idx, setIdx] = useState(0);
-
-  if (!images?.length) return (
-    <div style={{
-      height: 180, background: "#f3f4f6", borderRadius: 12,
-      display: "flex", alignItems: "center", justifyContent: "center",
-      color: "#9ca3af", fontSize: 13,
-    }}>이미지 없음</div>
-  );
+  if (!images?.length) {
+    return (
+      <div style={{
+        height: 180, background: "#f3f4f6", borderRadius: 12,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        color: "#9ca3af", fontSize: 13,
+      }}>
+        이미지 없음
+      </div>
+    );
+  }
 
   return (
-    <div style={{ position: "relative", borderRadius: 12, overflow: "hidden" }}>
-      <img
-        src={images[idx]}
-        alt={`이미지 ${idx + 1}`}
-        style={{ width: "100%", height: 200, objectFit: "cover", display: "block" }}
-      />
-      {images.length > 1 && (
-        <>
-          <button onClick={() => setIdx((p) => (p - 1 + images.length) % images.length)}
-            style={arrowBtn("left")}>‹</button>
-          <button onClick={() => setIdx((p) => (p + 1) % images.length)}
-            style={arrowBtn("right")}>›</button>
-          <div style={{
-            position: "absolute", bottom: 8, left: "50%", transform: "translateX(-50%)",
-            display: "flex", gap: 5,
-          }}>
-            {images.map((_, i) => (
-              <div key={i} onClick={() => setIdx(i)} style={{
-                width: 6, height: 6, borderRadius: "50%", cursor: "pointer",
-                background: i === idx ? "#fff" : "rgba(255,255,255,0.5)",
-              }} />
-            ))}
-          </div>
-        </>
-      )}
+    <div 
+      className="hide-scrollbar" // 💡 스크롤바 숨기기 (이전 단계에서 style 태그에 추가했던 클래스)
+      style={{ 
+        display: "flex", 
+        overflowX: "auto", // 가로 스크롤 허용
+        scrollSnapType: "x mandatory", // 스크롤 시 부드럽게 딱딱 걸리도록 설정
+        gap: 12, // 이미지 사이 간격
+        WebkitOverflowScrolling: "touch", // iOS에서 부드러운 스크롤 지원
+      }}
+    >
+      {images.map((img, idx) => (
+        <img
+          key={idx}
+          src={img}
+          alt={`이미지 ${idx + 1}`}
+          style={{ 
+            flexShrink: 0, 
+            // 🌟 핵심: 이미지가 여러 장일 경우 85%만 차지하게 해서 다음 이미지가 살짝 보이게 만듭니다! (스와이프 유도)
+            width: images.length > 1 ? "85%" : "100%", 
+            height: 200, 
+            objectFit: "cover", 
+            borderRadius: 12,
+            scrollSnapAlign: "center", // 스크롤 멈출 때 화면 중앙에 자석처럼 붙게 함
+          }}
+        />
+      ))}
     </div>
   );
 }
@@ -106,20 +109,25 @@ function DetailPanel({ place, onClose }: { place: PlaceData; onClose: () => void
   const [liked, setLiked] = useState(false);
   const [showReviews, setShowReviews] = useState(false);
 
+  // 🌟 핵심 1: 바텀시트가 위로 끝까지 올라갔는지(확장되었는지) 체크하는 상태
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [startY, setStartY] = useState(0);
+
   useEffect(() => {
     if (!place.apiId) return;
     setReviews([]);
     setSkip(0);
     setShowReviews(false);
     setHasMore(true);
+    setIsExpanded(false); // 식당이 바뀌면 바텀시트도 다시 반으로 내림
 
-    // 초기 리뷰 로드
     getReviews(place.apiId, 0, 3)
       .then((res) => setReviews(res.map(mapReviewResponse)))
       .catch(console.error);
   }, [place.apiId]);
 
   const loadMoreReviews = async () => {
+    // ... (기존 loadMoreReviews 로직 동일) ...
     if (!place.apiId) return;
     setLoadingReviews(true);
     try {
@@ -139,125 +147,199 @@ function DetailPanel({ place, onClose }: { place: PlaceData; onClose: () => void
     }
   };
 
+  // 🌟 핵심 2: 터치 드래그(스와이프) 방향을 감지해서 시트 올리고 내리기
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setStartY(e.touches[0].clientY);
+  };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    const endY = e.changedTouches[0].clientY;
+    if (startY - endY > 50) {
+      setIsExpanded(true); // 위로 50px 이상 쓸어올리면 확장!
+    } else if (endY - startY > 50) {
+      setIsExpanded(false); // 아래로 50px 이상 쓸어내리면 축소!
+    }
+  };
+
   const categoryTags = place.category
     ?.split(/[>,]/).map((s) => s.trim()).filter(Boolean).slice(0, 3) ?? [];
 
   return (
-    <div style={{
-      position: "absolute", top: 0, right: 0,
-      width: 360, height: "100%",
-      background: "#fff",
-      boxShadow: "-4px 0 24px rgba(0,0,0,0.1)",
-      overflowY: "auto", zIndex: 10,
-      animation: "slideIn 0.22s ease",
-    }}>
+    <>
       <style>{`
-        @keyframes slideIn {
-          from { transform: translateX(100%); opacity: 0 }
-          to   { transform: translateX(0);    opacity: 1 }
+        /* 모바일 기본 (반만 올라온 상태) */
+        .detail-panel {
+          position: absolute;
+          bottom: 0; left: 0; right: 0; width: 100%;
+          height: 48vh; /* 🌟 초기 높이를 48% 정도로 설정 */
+          background: #fff;
+          border-top-left-radius: 24px; border-top-right-radius: 24px;
+          box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.15);
+          z-index: 10;
+          display: flex; flex-direction: column;
+          transition: height 0.3s cubic-bezier(0.16, 1, 0.3, 1); /* 🌟 높이 변할 때 부드럽게 애니메이션 */
+          animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
         }
+
+        /* 🌟 모바일 확장 상태 (위로 끌어올렸을 때) */
+        .detail-panel.expanded {
+          height: 90vh; 
+        }
+
+        /* 🌟 모바일 리뷰 영역 숨김 처리 */
+        .review-section { display: none; }
+        .detail-panel.expanded .review-section { display: block; animation: fadeIn 0.4s ease; }
+
+        /* 데스크탑(PC) 스타일 덮어쓰기 */
+        @media (min-width: 768px) {
+          .detail-panel, .detail-panel.expanded {
+            top: 16px; right: 16px; bottom: 16px; left: auto;
+            width: 360px; height: auto !important; max-height: calc(100vh - 32px);
+            border-radius: 24px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.15), 0 4px 12px rgba(0,0,0,0.08);
+            animation: slideInFloating 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+          }
+          .drag-handle { display: none !important; }
+          .review-section { display: block !important; } /* PC는 공간이 많으니 항상 리뷰 표시 */
+        }
+
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        @keyframes slideInFloating { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
 
-      <button onClick={onClose} style={{
-        position: "absolute", top: 12, left: 12, zIndex: 11,
-        background: "rgba(255,255,255,0.9)", border: "none", borderRadius: "50%",
-        width: 32, height: 32, fontSize: 16, cursor: "pointer",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        boxShadow: "0 1px 4px rgba(0,0,0,0.12)",
-      }}>✕</button>
-
-      <div style={{ padding: "52px 20px 32px" }}>
-
-        {/* 카테고리 태그 + 찜 */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      {/* 🌟 isExpanded 상태에 따라 클래스 추가 */}
+      <div className={`detail-panel ${isExpanded ? "expanded" : ""}`}>
+        
+        {/* 🌟 상단 헤더 영역 (완벽한 1열 배치) */}
+        <div style={{
+          position: "relative",
+          display: "flex",
+          justifyContent: "space-between", // 🌟 핵심: 왼쪽(카테고리)과 오른쪽(버튼)을 양끝으로 밀어줍니다.
+          alignItems: "center",
+          padding: "12px 16px 8px",
+          flexShrink: 0
+        }}>
+          
+          {/* 🌟 1. 왼쪽: 음식 카테고리 태그 (스크롤 영역에서 이사 왔습니다!) */}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", zIndex: 11 }}>
             {categoryTags.map((tag) => (
               <span key={tag} style={{
-                background: "#fef2f2", color: "#ef4444",
-                border: "1px solid #fecaca", borderRadius: 999,
-                padding: "3px 10px", fontSize: 12, fontWeight: 500,
+                background: "#fef2f2", color: "#ef4444", border: "1px solid #fecaca", 
+                borderRadius: 999, padding: "3px 10px", fontSize: 12, fontWeight: 500
               }}>{tag}</span>
             ))}
           </div>
-          <button onClick={() => setLiked((l) => !l)} style={{
-            background: "none", border: "none", fontSize: 22,
-            cursor: "pointer", lineHeight: 1,
-          }}>
-            {liked ? "❤️" : "🤍"}
-          </button>
-        </div>
 
-        <h2 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: "0 0 4px" }}>
-          {place.name}
-        </h2>
-        <p style={{ fontSize: 13, color: "#6b7280", margin: "0 0 8px" }}>
-          {place.address}
-        </p>
-        <div style={{ marginBottom: 20 }}>
-          <Stars rating={place.rating ?? 0} />
-          <span style={{ fontSize: 12, color: "#9ca3af", marginLeft: 6 }}>
-            리뷰 {place.reviewCount ?? 0}개
-          </span>
-        </div>
-
-        <hr style={{ border: "none", borderTop: "1px solid #f3f4f6", margin: "0 0 18px" }} />
-
-        {/* 리뷰 섹션 */}
-        {reviews.length > 0 && (
-          <div style={{ marginBottom: 20 }}>
-            <h3 style={{ fontSize: 13, fontWeight: 600, color: "#374151", margin: "0 0 10px" }}>리뷰</h3>
-
-            <ReviewCard review={reviews[0]} />
-
-            {!showReviews ? (
-              <button onClick={() => setShowReviews(true)} style={{
-                display: "block", width: "100%", marginTop: 8,
-                background: "none", border: "1px solid #e5e7eb",
-                borderRadius: 8, padding: "8px 0",
-                fontSize: 12, color: "#6b7280", cursor: "pointer",
-              }}>
-                리뷰 더보기 →
-              </button>
-            ) : (
-              <>
-                {reviews.slice(1).map((r) => (
-                  <div key={r.id} style={{ marginTop: 8 }}>
-                    <ReviewCard review={r} />
-                  </div>
-                ))}
-                {hasMore && (
-                  <button onClick={loadMoreReviews} disabled={loadingReviews} style={{
-                    display: "block", width: "100%", marginTop: 8,
-                    background: "none", border: "1px solid #e5e7eb",
-                    borderRadius: 8, padding: "8px 0",
-                    fontSize: 12, color: "#6b7280", cursor: "pointer",
-                  }}>
-                    {loadingReviews ? "로딩 중..." : "더 불러오기"}
-                  </button>
-                )}
-              </>
-            )}
+          {/* 2. 중앙: 모바일용 드래그 손잡이 (화면 정중앙 고정) */}
+          <div 
+            className="drag-handle" 
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+            onClick={() => setIsExpanded(!isExpanded)} 
+            style={{
+              position: "absolute",
+              left: "50%",
+              transform: "translateX(-50%)", 
+              height: "100%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "0 20px",
+              cursor: "pointer",
+              zIndex: 10
+            }}
+          >
+            <div style={{ width: 40, height: 4, background: "#e5e7eb", borderRadius: 99 }} />
           </div>
-        )}
 
-        <hr style={{ border: "none", borderTop: "1px solid #f3f4f6", margin: "0 0 18px" }} />
+          {/* 3. 오른쪽: 즐겨찾기 & 닫기 버튼 묶음 */}
+          <div style={{ display: "flex", gap: 8, zIndex: 11 }}>
+            
+            <button onClick={() => setLiked((l) => !l)} style={{
+              background: "#f3f4f6", border: "none", borderRadius: "50%",
+              width: 32, height: 32, fontSize: 16, cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              boxShadow: "0 2px 4px rgba(0,0,0,0.05)"
+            }}>
+              {liked ? "❤️" : "🤍"}
+            </button>
 
-        <ImageSwiper images={place.images} />
+            <button onClick={onClose} style={{
+              background: "#f3f4f6", border: "none", borderRadius: "50%",
+              width: 32, height: 32, fontSize: 16, cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center", 
+              color: "#4b5563",
+              boxShadow: "0 2px 4px rgba(0,0,0,0.05)"
+            }}>✕</button>
+            
+          </div>
+        </div>
 
-        {place.link && (
-          <a href={place.link} target="_blank" rel="noopener noreferrer" style={{
-            display: "block", textAlign: "center", marginTop: 16,
-            padding: "10px", background: "#fef9c3", color: "#92400e",
-            borderRadius: 10, fontSize: 13, fontWeight: 600, textDecoration: "none",
-          }}>
-            카카오맵에서 보기 →
-          </a>
-        )}
+        {/* 스크롤 영역 */}
+        <div className="hide-scrollbar" style={{ overflowY: "auto", flex: 1, width: "100%" }}>
+          <div style={{ padding: "4px 20px 32px" }}>
+            
+            {/* 🌟 기존에 있던 카테고리 태그 렌더링 부분은 위로 올렸으므로 여기서 삭제했습니다! */}
+            
+            <h2 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: "0 0 4px" }}>{place.name}</h2>
+            <p style={{ fontSize: 13, color: "#6b7280", margin: "0 0 8px" }}>{place.address}</p>
+            <div style={{ marginBottom: 20 }}>
+              <Stars rating={place.rating ?? 0} />
+              <span style={{ fontSize: 12, color: "#9ca3af", marginLeft: 6 }}>리뷰 {place.reviewCount ?? 0}개</span>
+            </div>
+
+            {/* 🌟 2. 이미지 스와이퍼를 위로 끌어올림 (네이버지도 스타일) */}
+            <ImageSwiper images={place.images} />
+
+            {place.link && (
+              <a href={place.link} target="_blank" rel="noopener noreferrer" style={{
+                display: "block", textAlign: "center", marginTop: 16, padding: "10px", 
+                background: "#fef9c3", color: "#92400e", borderRadius: 10, fontSize: 13, fontWeight: 600, textDecoration: "none"
+              }}>카카오맵에서 보기 →</a>
+            )}
+
+            {/* 🌟 3. 리뷰 영역 (모바일에서는 확장 전까지 숨겨짐) */}
+            <div className="review-section">
+              <hr style={{ border: "none", borderTop: "1px solid #f3f4f6", margin: "24px 0 18px" }} />
+              
+              {reviews.length > 0 && (
+                <div>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, color: "#374151", margin: "0 0 12px" }}>방문자 리뷰</h3>
+                  <ReviewCard review={reviews[0]} />
+
+                  {!showReviews ? (
+                    <button onClick={() => setShowReviews(true)} style={{
+                      display: "block", width: "100%", marginTop: 8, background: "none", border: "1px solid #e5e7eb",
+                      borderRadius: 8, padding: "8px 0", fontSize: 12, color: "#6b7280", cursor: "pointer"
+                    }}>리뷰 더보기 →</button>
+                  ) : (
+                    <>
+                      {reviews.slice(1).map((r) => (
+                        <div key={r.id} style={{ marginTop: 8 }}><ReviewCard review={r} /></div>
+                      ))}
+                      {hasMore && (
+                        <button onClick={loadMoreReviews} disabled={loadingReviews} style={{
+                          display: "block", width: "100%", marginTop: 8, background: "none", border: "1px solid #e5e7eb",
+                          borderRadius: 8, padding: "8px 0", fontSize: 12, color: "#6b7280", cursor: "pointer"
+                        }}>
+                          {loadingReviews ? "로딩 중..." : "더 불러오기"}
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
+          </div>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
-
 // ─── 카카오맵 컴포넌트 ─────────────────────────────────────────────────────────
 
 interface MapProps {
@@ -328,13 +410,33 @@ function KakaoMap({ places, currentLocation, onPlaceClick, onBoundsChange }: Map
     document.head.appendChild(script);
   }, [initMap]);
 
-  // 현재 위치 마커
+  // 🌟 현재 위치 마커 (커스텀 디자인 적용)
   useEffect(() => {
     if (!mapReady || !currentLocation) return;
+    
+    // 기존 마커가 있다면 지도에서 지움
     if (currentMarkerRef.current) currentMarkerRef.current.setMap(null);
+    
     const pos = new window.kakao.maps.LatLng(currentLocation.lat, currentLocation.lng);
-    currentMarkerRef.current = new window.kakao.maps.Marker({ position: pos, map: mapInstanceRef.current });
-    mapInstanceRef.current.setCenter(pos);
+
+    // 💡 마법의 커스텀 마커: SVG 코드를 Base64(URI)로 굽어 넣어서 파란색 둥근 점을 만듭니다.
+    // 외부 이미지 링크 없이 깔끔하게 렌더링됩니다!
+    const svgIcon = `data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='9' fill='%233B82F6' stroke='%23FFFFFF' stroke-width='3'/%3E%3C/svg%3E`;
+    const imageSize = new window.kakao.maps.Size(24, 24);
+    
+    // 마커 이미지 객체 생성
+    const markerImage = new window.kakao.maps.MarkerImage(svgIcon, imageSize);
+
+    // 내 위치 마커 생성 (커스텀 이미지 적용 및 zIndex 올려서 식당 마커 위에 뜨게)
+    currentMarkerRef.current = new window.kakao.maps.Marker({ 
+      position: pos, 
+      map: mapInstanceRef.current,
+      image: markerImage,
+      zIndex: 3 
+    });
+    
+    // 위치가 업데이트될 때 중심으로 부드럽게 이동 (GPS 허용 시 홍대 -> 내 위치로 슝 이동!)
+    mapInstanceRef.current.panTo(pos);
   }, [currentLocation, mapReady]);
 
   // 식당 마커
@@ -416,15 +518,21 @@ export default function MapPage() {
   const [places, setPlaces] = useState<PlaceData[]>([]);
   const [selectedPlace, setSelectedPlace] = useState<PlaceData | null>(null);
   const isFetchingRef = useRef(false);
+  const HONGDAE_COORD = { lat: 37.5568, lng: 126.9242 };
 
   useEffect(() => {
-    if (!navigator.geolocation) {
-      setCurrentLocation({ lat: 37.4842, lng: 126.8959 });
-      return;
-    }
+    // 브라우저가 GPS를 지원하지 않으면 그대로 홍대 유지
+    if (!navigator.geolocation) return; 
+
+    // 🌟 2. 사용자가 GPS를 허용하면 그때 위치를 덮어씌웁니다.
     navigator.geolocation.getCurrentPosition(
-      ({ coords }) => setCurrentLocation({ lat: coords.latitude, lng: coords.longitude }),
-      () => setCurrentLocation({ lat: 37.4842, lng: 126.8959 })
+      ({ coords }) => {
+        setCurrentLocation({ lat: coords.latitude, lng: coords.longitude });
+      },
+      (error) => {
+        // 사용자가 거부(블락)하면 에러 로그만 남기고 기본 위치(홍대)를 유지합니다.
+        console.log("GPS 접근이 거부되었거나 실패했습니다. 홍대 위치를 유지합니다.", error);
+      }
     );
   }, []);
 
@@ -451,7 +559,9 @@ export default function MapPage() {
   return (
     <div style={{
       position: "relative",
-      width: "100%",
+      // 🌟 부모(RootLayout)의 제한을 부수고 나가는 마법의 2줄!
+      width: "100vw", 
+      marginLeft: "calc(50% - 50vw)",
       height: "calc(100vh - 60px)",
       overflow: "hidden",
     }}>

@@ -32,6 +32,10 @@ export interface PlaceData {
   openHours?: string;
   isHot?: boolean;
   area?: string;
+
+  // 🌟 (추천) API 응답에 있는 유용한 데이터 추가
+  distance?: number;        // 내 위치와의 거리 (미터 단위)
+  isBookmarked?: boolean;   // 내가 찜한 맛집인지 여부
 }
 
 declare global {

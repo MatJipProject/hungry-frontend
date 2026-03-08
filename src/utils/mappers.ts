@@ -7,6 +7,8 @@ import type {
 } from "@/types/api";
 
 export function mapNearbyToPlaceData(res: RestaurantNearbyResponse): PlaceData {
+  const combinedImages = [res.image_url, ...(res.images || [])].filter(Boolean);
+
   return {
     id: `api-${res.id}`,
     apiId: res.id,
@@ -21,7 +23,9 @@ export function mapNearbyToPlaceData(res: RestaurantNearbyResponse): PlaceData {
     reviewCount: res.review_count,
     review: res.review_preview,
     link: res.place_url,
-    images: res.images,
+    images: combinedImages,
+    distance: res.distance,
+    isBookmarked: res.is_bookmarked,
   };
 }
 
