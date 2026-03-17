@@ -1,3 +1,5 @@
+const API_BASE_URL = "https://api.baebulook.site";
+
 export interface User {
   id: string;
   name: string;
@@ -25,6 +27,7 @@ export interface Place {
   region?: string;
 }
 
+
 export interface Review {
   id: string;
   restaurantId: string;
@@ -36,7 +39,6 @@ export interface Review {
   imageUrls?: string[];
 }
 
-const API_BASE_URL = "https://api.baebulook.site";
 
 // 맛집 최신 목록 조회
 export async function fetchPlaces(): Promise<Place[]> {
@@ -315,3 +317,4 @@ export async function removeBookmark(restaurantId: number | string) {
     throw error;
   }
 }
+
