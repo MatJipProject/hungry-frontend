@@ -2,8 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { Swiper, SwiperSlide } from "swiper/react";
-import { Navigation, Pagination, Autoplay } from "swiper/modules";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link"; // Next.js의 Link 컴포넌트를 불러옵니다!
 import { fetchPlaces, fetchTrendingPlaces, Place } from "@/lib/api"; // 경로에 맞게 임포트 해주세요!

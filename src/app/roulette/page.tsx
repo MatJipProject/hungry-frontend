@@ -1,8 +1,32 @@
+import Image from "next/image";
+import MenuRoulette from "@/components/MenuRoulette";
+
 export default function RoulettePage() {
   return (
-    <div className="py-6">
-      <h2 className="text-xl font-bold text-gray-800">메뉴 추천</h2>
-      <p className="text-gray-500 mt-2">메뉴 추천 콘텐츠</p>
+    <div className="relative min-h-[calc(100vh-60px)] bg-gray-50 flex flex-col items-center justify-center p-6 overflow-hidden">
+      {/* 배경 장식 SVG */}
+      <div className="absolute left-0 top-1/2 -translate-y-1/2 translate-x-8 pointer-events-none select-none">
+        <Image
+          src="/left.svg"
+          alt=""
+          width={150}
+          height={344}
+          className="opacity-60"
+          aria-hidden
+        />
+      </div>
+      <div className="absolute right-0 top-1/2 -translate-y-1/2 -translate-x-8 pointer-events-none select-none">
+        <Image
+          src="/right.svg"
+          alt=""
+          width={170}
+          height={307}
+          className="opacity-60"
+          aria-hidden
+        />
+      </div>
+
+      <MenuRoulette />
     </div>
   );
 }

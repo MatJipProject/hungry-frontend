@@ -253,7 +253,7 @@ export default function AddRestaurantPage() {
                 <button
                   type="button"
                   onClick={handleSearch}
-                  className="ml-4 px-6 py-3 bg-gradient-to-r from-[#E8513D] to-[#F97316] text-white font-bold rounded-xl shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50 transform hover:-translate-y-0.5 transition-all duration-200"
+                  className="ml-4 px-6 py-3 bg-gradient-to-r from-[#E8513D] to-[#F97316] text-white font-bold rounded-xl shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50 transform hover:-translate-y-0.5 transition-all duration-200 whitespace-nowrap shrink-0"
                 >
                   검색
                 </button>

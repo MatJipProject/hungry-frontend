@@ -6,6 +6,9 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "배부룩",
   description: "배부룩 - 맛집 추천 서비스",
+  icons: {
+    icon: "/favicon.ico",
+  },
 };
 
 export const viewport: Viewport = {
