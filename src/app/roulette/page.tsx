@@ -1,8 +1,9 @@
+import MenuRoulette from "@/components/MenuRoulette";
+
 export default function RoulettePage() {
   return (
-    <div className="py-6">
-      <h2 className="text-xl font-bold text-gray-800">메뉴 추천</h2>
-      <p className="text-gray-500 mt-2">메뉴 추천 콘텐츠</p>
+    <div className="min-h-[calc(100vh-60px)] bg-gray-50 flex items-center justify-center p-6">
+      <MenuRoulette />
     </div>
   );
 }
