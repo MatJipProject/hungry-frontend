@@ -53,11 +53,25 @@ export default function MenuRoulette() {
 
   return (
     <div className="flex flex-col items-center gap-6 w-full max-w-lg mx-auto">
-      <div className="text-center">
-        <h1 className="text-2xl font-black text-gray-900">오늘 뭐 먹지?</h1>
-        <p className="text-sm text-gray-400 mt-1">
-          룰렛을 돌려 오늘의 메뉴를 정해보세요
-        </p>
+      {/* 헤더 */}
+      <div className="flex flex-col items-center gap-2">
+        <div className="px-5 py-1.5 bg-white border-2 border-[#FF5631] rounded-full shadow-sm">
+          <span className="text-sm font-semibold text-[#FF5631] tracking-widest uppercase">
+            Menu Roulette
+          </span>
+        </div>
+        <h1
+          className="text-3xl text-[#FF5631] leading-tight"
+          style={{ fontFamily: "'BagelFatOne-Regular', sans-serif" }}
+        >
+          오늘 뭐 먹지?
+        </h1>
+        <h2
+          className="text-xl text-black leading-tight font-medium"
+          style={{ fontFamily: "'Pretendard', sans-serif" }}
+        >
+          메뉴 고민? 룰렛이 대신 결정해드립니다
+        </h2>
       </div>
 
       {/* 룰렛 영역 */}
@@ -122,15 +136,17 @@ export default function MenuRoulette() {
         </button>
       </div>
 
-      {/* 결과 */}
-      {result && (
-        <div className="w-full text-center py-4 px-6 bg-orange-50 border border-orange-100 rounded-2xl">
-          <p className="text-xs text-orange-400 font-medium mb-1">
-            오늘의 추천 메뉴
-          </p>
-          <p className="text-xl font-extrabold text-[#E8513D]">{result}</p>
-        </div>
-      )}
+      {/* 결과 - 항상 공간 차지해서 룰렛 위치 고정 */}
+      <div className="w-full h-[80px] flex items-center justify-center">
+        {result && (
+          <div className="w-full text-center py-4 px-6 bg-orange-50 border border-orange-100 rounded-2xl">
+            <p className="text-xs text-orange-400 font-medium mb-1">
+              오늘의 추천 메뉴
+            </p>
+            <p className="text-xl font-extrabold text-[#E8513D]">{result}</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

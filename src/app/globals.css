@@ -28,14 +28,12 @@ body {
   background-color: #f8f9fa;
 }
 
-/* iOS 입력 확대 방지 */
 input,
 textarea,
 select {
   font-size: 16px !important;
 }
 
-/* Safe Area */
 .safe-area-top {
   padding-top: env(safe-area-inset-top);
 }
@@ -49,7 +47,6 @@ select {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
-/* 스크롤바 숨김 */
 .scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;
@@ -58,7 +55,6 @@ select {
   display: none;
 }
 
-/* 그라디언트 텍스트 */
 .text-gradient-brand {
   background: linear-gradient(to right, #e8513d, #f97316);
   -webkit-background-clip: text;
@@ -66,7 +62,6 @@ select {
   background-clip: text;
 }
 
-/* 애니메이션 */
 @keyframes fadeInUp {
   from {
     opacity: 0;
@@ -82,12 +77,10 @@ select {
   animation: fadeInUp 0.5s ease-out forwards;
 }
 
-/* 버튼 프레스 효과 */
 .btn-press:active {
   transform: scale(0.97);
 }
 
-/* 카드 호버 */
 .card-hover-lift {
   transition:
     transform 0.2s ease,
@@ -98,7 +91,6 @@ select {
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
 }
 
-/* 탭 전환 */
 .tab-content-enter {
   animation: fadeInUp 0.3s ease-out;
 }
